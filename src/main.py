@@ -8,6 +8,8 @@ from typing import Callable
 from src.adapters.ai.fake_ai_adapter import FakeAI
 from src.adapters.data.fake_data_provider import FakeDataProvider
 from src.adapters.db.memory import MemoryStore, MemoryUnitOfWork
+from src.adapters.email.fake_finder import FakeEmailFinder
+from src.adapters.email.fake_sender import FakeEmailSender
 from src.application.accounts import ensure_tenant
 from src.config import Config, load_config
 from src.delivery.api.app import create_app
@@ -45,6 +47,8 @@ def build_deps(config: Config) -> Deps:
         data_provider=data_provider,
         ai=FakeAI(),  # real Anthropic Haiku adapter swaps in here later
         uow_factory_for=uow_factory_for,
+        email_finder=FakeEmailFinder(),  # real Hunter/site-crawl swaps in later
+        email_sender=FakeEmailSender(),  # real Resend/Postmark swaps in later
     )
 
 

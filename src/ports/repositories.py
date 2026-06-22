@@ -9,7 +9,14 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from src.domain.entities import Account, CreditLedgerEntry, Lead, Run
+from src.domain.entities import (
+    Account,
+    CreditLedgerEntry,
+    Lead,
+    Message,
+    Run,
+    Suppression,
+)
 
 
 class AccountRepo(Protocol):
@@ -36,12 +43,25 @@ class CreditRepo(Protocol):
         ...
 
 
+class MessageRepo(Protocol):
+    def add(self, message: Message) -> None: ...
+
+
+class SuppressionRepo(Protocol):
+    def add(self, suppression: Suppression) -> None: ...
+    def is_suppressed(self, account_id: str, email: str) -> bool:
+        """True if the email or its domain is on the suppression list."""
+        ...
+
+
 @runtime_checkable
 class UnitOfWork(Protocol):
     accounts: AccountRepo
     leads: LeadRepo
     runs: RunRepo
     credits: CreditRepo
+    messages: MessageRepo
+    suppression: SuppressionRepo
 
     def __enter__(self) -> "UnitOfWork": ...
     def __exit__(self, exc_type, exc, tb) -> bool | None: ...

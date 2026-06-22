@@ -12,17 +12,13 @@ from typing import Callable
 
 from src.application import credits
 from src.domain.entities import Lead
-from src.domain.errors import LeadCenterError
+from src.domain.errors import LeadNotFoundError
 from src.ports.ai import AIPort, PitchBrief
 from src.ports.repositories import UnitOfWork
 
 UnitOfWorkFactory = Callable[[], UnitOfWork]
 
-
-class LeadNotFoundError(LeadCenterError):
-    def __init__(self, lead_id: str) -> None:
-        self.lead_id = lead_id
-        super().__init__(f"lead {lead_id} not found")
+__all__ = ["LeadNotFoundError", "build_brief", "draft_pitch"]
 
 
 def build_brief(lead: Lead) -> PitchBrief:

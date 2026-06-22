@@ -43,11 +43,20 @@ Never commit these. `.env` is git-ignored.
 
 ---
 
+## Enabling outreach (step 5) — built, off by default
+The find → verify → suppression → send → track pipeline is implemented behind a flag,
+on **fake** email adapters. To turn it on:
+- Set `OUTREACH_ENABLED=true`.
+- Set `OUTREACH_PHYSICAL_ADDRESS` (a real postal address — **required**, CAN-SPAM; sends
+  are refused without it), plus `OUTREACH_FROM_NAME/EMAIL` and `OUTREACH_UNSUBSCRIBE_URL`.
+- ⚠️ Nothing real is sent until you write a real `EmailSenderPort` adapter (Resend/Postmark)
+  and an `EmailFinderPort` (Hunter/site-crawl), and **warm a sending domain with
+  SPF/DKIM/DMARC**. The `GET /unsubscribe` endpoint and suppression list are already wired.
+
 ## Not done yet — required before a PUBLIC launch (later passes)
-- **Backend step 3** — `fresh_pain` signal detector (and it unlocks Opportunity's Vigor).
-- **Backend step 4** — Pitch generation (Anthropic `AIPort`; needs `ANTHROPIC_API_KEY`).
-- **Backend step 5** — Outreach: email find → verify → suppression → send → track, with
-  CAN-SPAM compliance and **SPF/DKIM/DMARC** on the sending domain (needs an email vendor).
+- **Real adapters** — Outscraper (data), Anthropic Haiku (pitch), Resend/Postmark + Hunter
+  (outreach). All exist as ports with fakes; each needs your key + a small dependency.
 - **Backend step 6** — Stripe credit packs + idempotent webhook ledger.
+- **Reply/bounce ingestion** — inbound tracking (status replied/booked) + bounce webhook.
 - **Public auth** — replace the single-password session with Supabase Auth/JWT + signup.
 - **Brand** — footer/favicon via `brand.js` (deferred per CLAUDE.md; ask before adding).

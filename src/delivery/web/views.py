@@ -72,19 +72,28 @@ def _fake_badge(source: str) -> str:
     return ""
 
 
-def _pitch_cell(lead: Lead) -> str:
-    """Either the drafted pitch text, or a Draft button to generate one."""
-    if lead.pitch:
-        return f"<div class='pitch'>{escape(lead.pitch)}</div>"
-    return (
-        f"<form method='post' action='/leads/{escape(lead.id)}/draft' style='margin:0'>"
-        "<button type='submit'>Draft</button></form>"
-    )
+def _pitch_cell(lead: Lead, outreach_enabled: bool) -> str:
+    """Pitch text + the next action: Draft -> Contact -> contacted."""
+    if not lead.pitch:
+        return (
+            f"<form method='post' action='/leads/{escape(lead.id)}/draft' style='margin:0'>"
+            "<button type='submit'>Draft</button></form>"
+        )
+    cell = f"<div class='pitch'>{escape(lead.pitch)}</div>"
+    if lead.status.value == "contacted":
+        cell += "<div class='sep'>✓ contacted</div>"
+    elif outreach_enabled:
+        cell += (
+            f"<form method='post' action='/leads/{escape(lead.id)}/send' style='margin:.4rem 0 0'>"
+            "<button type='submit'>Contact</button></form>"
+        )
+    return cell
 
 
 def render_dashboard(
     account_name: str, balance: int, leads: list[Lead],
     message: str | None = None, error: str | None = None,
+    outreach_enabled: bool = False,
 ) -> str:
     msg = f"<p class='msg'>{escape(message)}</p>" if message else ""
     err = f"<p class='err'>{escape(error)}</p>" if error else ""
@@ -95,7 +104,7 @@ def render_dashboard(
         f"<td>{'🔥 ' if l.hot_signal else ''}{escape(l.name)}{_fake_badge(l.source)}</td>"
         f"<td>{escape(l.category or '—')}</td>"
         f"<td>{l.opportunity}</td><td>{l.fit}</td><td>{l.confidence}</td>"
-        f"<td>{_pitch_cell(l)}</td>"
+        f"<td>{_pitch_cell(l, outreach_enabled)}</td>"
         "</tr>"
         for l in leads
     ) or "<tr><td colspan='7'>No leads yet — run a scan above.</td></tr>"

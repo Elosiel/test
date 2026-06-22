@@ -14,7 +14,15 @@ import json
 
 import psycopg
 
-from src.domain.entities import Account, CreditLedgerEntry, Lead, LeadStatus, Run
+from src.domain.entities import (
+    Account,
+    CreditLedgerEntry,
+    Lead,
+    LeadStatus,
+    Message,
+    Run,
+    Suppression,
+)
 
 
 class _AccountRepo:
@@ -177,6 +185,48 @@ class _CreditRepo:
         return int(self._cur.fetchone()[0])
 
 
+class _MessageRepo:
+    def __init__(self, cur: psycopg.Cursor) -> None:
+        self._cur = cur
+
+    def add(self, message: Message) -> None:
+        self._cur.execute(
+            """
+            INSERT INTO messages (id, account_id, lead_id, direction, subject, body,
+                                  provider_id, state, sent_at, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (message.id, message.account_id, message.lead_id, message.direction.value,
+             message.subject, message.body, message.provider_id, message.state.value,
+             message.sent_at, message.created_at),
+        )
+
+
+class _SuppressionRepo:
+    def __init__(self, cur: psycopg.Cursor) -> None:
+        self._cur = cur
+
+    def add(self, suppression: Suppression) -> None:
+        self._cur.execute(
+            """
+            INSERT INTO suppression (id, account_id, email_or_domain, reason, created_at)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (suppression.id, suppression.account_id, suppression.email_or_domain.lower(),
+             suppression.reason, suppression.created_at),
+        )
+
+    def is_suppressed(self, account_id: str, email: str) -> bool:
+        email = email.lower()
+        domain = email.split("@")[-1]
+        self._cur.execute(
+            "SELECT 1 FROM suppression WHERE account_id = %s "
+            "AND lower(email_or_domain) IN (%s, %s) LIMIT 1",
+            (account_id, email, domain),
+        )
+        return self._cur.fetchone() is not None
+
+
 class PostgresUnitOfWork:
     """Opens a connection + transaction per ``with`` block, scoped to one account."""
 
@@ -195,6 +245,8 @@ class PostgresUnitOfWork:
         self.leads = _LeadRepo(self._cur)
         self.runs = _RunRepo(self._cur)
         self.credits = _CreditRepo(self._cur)
+        self.messages = _MessageRepo(self._cur)
+        self.suppression = _SuppressionRepo(self._cur)
         self._committed = False
         return self
 

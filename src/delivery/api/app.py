@@ -8,15 +8,28 @@ It is clearly a stand-in, not production auth.
 from __future__ import annotations
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from src.application import credits
-from src.application.pitch import LeadNotFoundError, draft_pitch
+from src.application.outreach import contact_lead, unsubscribe
+from src.application.pitch import draft_pitch
 from src.application.run_scan import RunScanResult
 from src.delivery.auth import make_current_account
 from src.delivery.deps import Deps, ScanParams, execute_scan
 from src.domain.entities import Lead
-from src.domain.errors import ConfirmationRequiredError, InsufficientCreditsError
+from src.domain.errors import (
+    ComplianceConfigError,
+    ConfirmationRequiredError,
+    EmailNotFoundError,
+    EmailUnverifiedError,
+    InsufficientCreditsError,
+    LeadNotFoundError,
+    LowConfidenceError,
+    OutreachDisabledError,
+    PitchRequiredError,
+    SuppressedError,
+)
 
 
 class ScanRequest(BaseModel):
@@ -141,5 +154,38 @@ def create_app(deps: Deps) -> FastAPI:
                         "available": e.available},
             )
         return LeadDTO.from_lead(lead)
+
+    @app.post("/leads/{lead_id}/contact", response_model=LeadDTO)
+    def post_contact(lead_id: str, account_id: str = Depends(require_account)) -> LeadDTO:
+        try:
+            lead = contact_lead(
+                deps.uow_factory_for(account_id),
+                deps.email_finder,
+                deps.email_sender,
+                account_id=account_id,
+                lead_id=lead_id,
+                config=deps.config,
+            )
+        except OutreachDisabledError:
+            raise HTTPException(status_code=403, detail="outreach is disabled")
+        except LeadNotFoundError:
+            raise HTTPException(status_code=404, detail="lead not found")
+        except InsufficientCreditsError as e:
+            raise HTTPException(
+                status_code=402,
+                detail={"error": "insufficient_credits", "required": e.required,
+                        "available": e.available},
+            )
+        except (PitchRequiredError, LowConfidenceError, EmailNotFoundError,
+                EmailUnverifiedError, SuppressedError, ComplianceConfigError) as e:
+            raise HTTPException(status_code=409, detail={"error": type(e).__name__,
+                                                         "message": str(e)})
+        return LeadDTO.from_lead(lead)
+
+    @app.get("/unsubscribe", response_class=PlainTextResponse)
+    def get_unsubscribe(email: str, account: str) -> str:
+        """Public (no auth) CAN-SPAM opt-out. Adds the address to suppression."""
+        unsubscribe(deps.uow_factory_for(account), account, email)
+        return "You have been unsubscribed. You will receive no further emails."
 
     return app

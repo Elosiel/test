@@ -13,6 +13,8 @@ from src.domain.entities import Persona, Territory
 from src.domain.scoring import Weights
 from src.ports.ai import AIPort
 from src.ports.data_provider import DataProviderPort
+from src.ports.email_finder import EmailFinderPort
+from src.ports.email_sender import EmailSenderPort
 from src.ports.repositories import UnitOfWork
 
 
@@ -24,6 +26,9 @@ class Deps:
     ai: AIPort
     # account_id -> UnitOfWork factory, so each request's transactions are tenant-scoped.
     uow_factory_for: Callable[[str], Callable[[], UnitOfWork]]
+    # Outreach ports (step 5). Optional so non-outreach wiring/tests can omit them.
+    email_finder: EmailFinderPort | None = None
+    email_sender: EmailSenderPort | None = None
 
 
 @dataclass

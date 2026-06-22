@@ -92,8 +92,34 @@ CREATE TABLE IF NOT EXISTS credit_ledger (
     created_at      timestamptz NOT NULL DEFAULT now()
 );
 
+-- Outreach messages (out today; inbound replies later).
+CREATE TABLE IF NOT EXISTS messages (
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id  uuid NOT NULL REFERENCES accounts(id),
+    lead_id     uuid NOT NULL REFERENCES leads(id),
+    direction   text NOT NULL CHECK (direction IN ('out', 'in')),
+    subject     text NOT NULL,
+    body        text NOT NULL,
+    provider_id text,
+    state       text NOT NULL DEFAULT 'queued'
+                CHECK (state IN ('queued', 'sent', 'bounced', 'replied')),
+    sent_at     timestamptz,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+-- Opt-outs + hard bounces. Checked before every send.
+CREATE TABLE IF NOT EXISTS suppression (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id      uuid NOT NULL REFERENCES accounts(id),
+    email_or_domain text NOT NULL,
+    reason          text NOT NULL,
+    created_at      timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS idx_leads_account ON leads(account_id);
 CREATE INDEX IF NOT EXISTS idx_ledger_account ON credit_ledger(account_id);
+CREATE INDEX IF NOT EXISTS idx_messages_account ON messages(account_id);
+CREATE INDEX IF NOT EXISTS idx_suppression_account ON suppression(account_id);
 
 -- ---------------------------------------------------------------------------
 -- Row-Level Security: the hard tenant boundary, enforced at the DB.
@@ -101,7 +127,8 @@ CREATE INDEX IF NOT EXISTS idx_ledger_account ON credit_ledger(account_id);
 DO $$
 DECLARE t text;
 BEGIN
-    FOREACH t IN ARRAY ARRAY['personas','territories','runs','leads','credit_ledger']
+    FOREACH t IN ARRAY ARRAY['personas','territories','runs','leads','credit_ledger',
+                             'messages','suppression']
     LOOP
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
         EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);

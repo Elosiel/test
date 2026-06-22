@@ -11,7 +11,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from src.domain.entities import Account, CreditLedgerEntry, Lead, Run
+from src.domain.entities import (
+    Account,
+    CreditLedgerEntry,
+    Lead,
+    Message,
+    Run,
+    Suppression,
+)
 
 
 @dataclass
@@ -21,6 +28,8 @@ class MemoryStore:
     leads: list[Lead] = field(default_factory=list)
     runs: list[Run] = field(default_factory=list)
     ledger: list[CreditLedgerEntry] = field(default_factory=list)
+    messages: list[Message] = field(default_factory=list)
+    suppression: list[Suppression] = field(default_factory=list)
 
 
 class _AccountRepo:
@@ -42,6 +51,34 @@ class _AccountRepo:
              if a.owner_user_id == owner_user_id),
             None,
         )
+
+
+class _MessageRepo:
+    def __init__(self, staged: list[Message]) -> None:
+        self._staged = staged
+
+    def add(self, message: Message) -> None:
+        self._staged.append(message)
+
+
+class _SuppressionRepo:
+    def __init__(self, store: MemoryStore, staged: list[Suppression]) -> None:
+        self._store = store
+        self._staged = staged
+
+    def add(self, suppression: Suppression) -> None:
+        self._staged.append(suppression)
+
+    def is_suppressed(self, account_id: str, email: str) -> bool:
+        email = email.lower()
+        domain = email.split("@")[-1]
+        for s in (*self._store.suppression, *self._staged):
+            if s.account_id != account_id:
+                continue
+            target = s.email_or_domain.lower()
+            if target == email or target == domain:
+                return True
+        return False
 
 
 class _LeadRepo:
@@ -100,10 +137,14 @@ class MemoryUnitOfWork:
         self._staged_leads: list[Lead] = []
         self._staged_runs: list[Run] = []
         self._staged_ledger: list[CreditLedgerEntry] = []
+        self._staged_messages: list[Message] = []
+        self._staged_suppression: list[Suppression] = []
         self.accounts = _AccountRepo(self._store, self._staged_accounts)
         self.leads = _LeadRepo(self._store, self._staged_leads)
         self.runs = _RunRepo(self._staged_runs)
         self.credits = _CreditRepo(self._store, self._staged_ledger)
+        self.messages = _MessageRepo(self._staged_messages)
+        self.suppression = _SuppressionRepo(self._store, self._staged_suppression)
         self._committed = False
         return self
 
@@ -119,6 +160,8 @@ class MemoryUnitOfWork:
                 self._store.leads.append(lead)
         self._store.runs.extend(self._staged_runs)
         self._store.ledger.extend(self._staged_ledger)
+        self._store.messages.extend(self._staged_messages)
+        self._store.suppression.extend(self._staged_suppression)
         self._committed = True
 
     def rollback(self) -> None:
@@ -126,6 +169,8 @@ class MemoryUnitOfWork:
         self._staged_leads.clear()
         self._staged_runs.clear()
         self._staged_ledger.clear()
+        self._staged_messages.clear()
+        self._staged_suppression.clear()
 
     def __exit__(self, exc_type, exc, tb) -> bool:
         if not self._committed:

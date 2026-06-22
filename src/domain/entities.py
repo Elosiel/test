@@ -28,6 +28,18 @@ class LeadStatus(str, Enum):
     BOOKED = "booked"
 
 
+class MessageDirection(str, Enum):
+    OUT = "out"
+    IN = "in"
+
+
+class MessageState(str, Enum):
+    QUEUED = "queued"
+    SENT = "sent"
+    BOUNCED = "bounced"
+    REPLIED = "replied"
+
+
 @dataclass(frozen=True)
 class Account:
     owner_user_id: str
@@ -138,5 +150,32 @@ class CreditLedgerEntry:
     reason: str
     balance_after: int
     stripe_event_id: str | None = None
+    id: str = field(default_factory=new_id)
+    created_at: datetime = field(default_factory=now)
+
+
+@dataclass(frozen=True)
+class Message:
+    """An outreach message (out) or, later, an inbound reply (in)."""
+    account_id: str
+    lead_id: str
+    direction: MessageDirection
+    subject: str
+    body: str
+    state: MessageState = MessageState.QUEUED
+    provider_id: str | None = None
+    sent_at: datetime | None = None
+    id: str = field(default_factory=new_id)
+    created_at: datetime = field(default_factory=now)
+
+
+@dataclass(frozen=True)
+class Suppression:
+    """An opt-out or hard bounce. Checked before every send; honored forever.
+    ``email_or_domain`` suppresses either a specific address or a whole domain.
+    """
+    account_id: str
+    email_or_domain: str
+    reason: str
     id: str = field(default_factory=new_id)
     created_at: datetime = field(default_factory=now)

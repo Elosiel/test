@@ -11,7 +11,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from src.application import credits
-from src.application.pitch import LeadNotFoundError, draft_pitch
+from src.application.outreach import contact_lead
+from src.application.pitch import draft_pitch
 from src.delivery.auth import (
     COOKIE_NAME,
     SESSION_TTL_SECONDS,
@@ -21,7 +22,15 @@ from src.delivery.auth import (
 )
 from src.delivery.deps import Deps, ScanParams, execute_scan
 from src.delivery.web import views
-from src.domain.errors import ConfirmationRequiredError, InsufficientCreditsError
+from src.domain.errors import (
+    ComplianceConfigError,
+    ConfirmationRequiredError,
+    EmailNotFoundError,
+    EmailUnverifiedError,
+    InsufficientCreditsError,
+    LeadCenterError,
+    LeadNotFoundError,
+)
 
 
 def create_web_router(deps: Deps) -> APIRouter:
@@ -44,7 +53,10 @@ def create_web_router(deps: Deps) -> APIRouter:
             leads = uow.leads.list_for_account(account_id)
         leads.sort(key=lambda l: l.rank, reverse=True)
         name = acct.name if acct else account_id
-        return HTMLResponse(views.render_dashboard(name, balance, leads, message, error))
+        return HTMLResponse(views.render_dashboard(
+            name, balance, leads, message, error,
+            outreach_enabled=config.outreach_enabled,
+        ))
 
     @router.get("/login", response_class=HTMLResponse)
     def login_form() -> str:
@@ -138,6 +150,36 @@ def create_web_router(deps: Deps) -> APIRouter:
                 account_id,
                 error=f"Not enough credits to draft: need {e.required}, have {e.available}.",
             )
+        return RedirectResponse("/", status_code=303)
+
+    @router.post("/leads/{lead_id}/send")
+    def send(lead_id: str, request: Request):
+        account_id = resolve_account(config, request)
+        if not account_id:
+            return RedirectResponse("/login", status_code=303)
+        try:
+            contact_lead(
+                deps.uow_factory_for(account_id),
+                deps.email_finder,
+                deps.email_sender,
+                account_id=account_id,
+                lead_id=lead_id,
+                config=config,
+            )
+        except InsufficientCreditsError as e:
+            return _render_dashboard(
+                account_id,
+                error=f"Not enough credits to send: need {e.required}, have {e.available}.",
+            )
+        except (EmailNotFoundError, EmailUnverifiedError) as e:
+            return _render_dashboard(account_id, error=f"Couldn't send: {e}")
+        except ComplianceConfigError:
+            return _render_dashboard(
+                account_id,
+                error="Set OUTREACH_PHYSICAL_ADDRESS before sending (CAN-SPAM).",
+            )
+        except LeadCenterError as e:
+            return _render_dashboard(account_id, error=str(e))
         return RedirectResponse("/", status_code=303)
 
     return router

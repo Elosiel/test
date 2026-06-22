@@ -52,6 +52,18 @@ class Config:
     tenant_owner_user_id: str = os.environ.get("TENANT_OWNER_USER_ID", "tenant-1")
     tenant_name: str = os.environ.get("TENANT_NAME", "FLUXO")
 
+    # Outreach (step 5). Disabled by default — the riskiest subsystem ships behind a
+    # flag. A send costs one credit and is refused below this confidence.
+    outreach_enabled: bool = os.environ.get("OUTREACH_ENABLED", "").lower() in {"1", "true", "yes"}
+    credit_per_send: int = 1
+    min_confidence_to_contact: int = 50
+    # CAN-SPAM: a real physical postal address and a working unsubscribe are required
+    # on every send. Empty physical_address blocks sending (enforced in compose).
+    from_name: str = os.environ.get("OUTREACH_FROM_NAME", "FLUXO")
+    from_email: str = os.environ.get("OUTREACH_FROM_EMAIL", "")
+    physical_address: str = os.environ.get("OUTREACH_PHYSICAL_ADDRESS", "")
+    unsubscribe_base_url: str = os.environ.get("OUTREACH_UNSUBSCRIBE_URL", "")
+
     def __post_init__(self) -> None:
         if self.backend == "postgres" and not self.database_url:
             raise ValueError("LEADCENTER_BACKEND=postgres requires DATABASE_URL")
