@@ -1,0 +1,30 @@
+[importlinter]
+root_package = src
+include_external_packages = True
+
+[importlinter:contract:layers]
+name = Dependencies point inward (delivery -> application -> ports -> domain)
+type = layers
+layers =
+    src.delivery
+    src.application
+    src.ports
+    src.domain
+
+[importlinter:contract:core-no-vendors]
+name = Domain and application import no vendor SDKs
+type = forbidden
+source_modules =
+    src.domain
+    src.application
+forbidden_modules =
+    fastapi
+    starlette
+    uvicorn
+    psycopg
+    sqlalchemy
+    supabase
+    anthropic
+    stripe
+    httpx
+    requests
