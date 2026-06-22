@@ -16,8 +16,9 @@ from dataclasses import dataclass
 from typing import Callable
 
 from src.application import credits
-from src.domain.entities import Business, Lead, Run, Territory, new_id
+from src.domain.entities import Business, Lead, Persona, Run, Territory, new_id
 from src.domain.errors import ConfirmationRequiredError, InsufficientCreditsError
+from src.domain.scoring import Weights, score_business
 from src.ports.data_provider import DataProviderPort
 from src.ports.repositories import UnitOfWork
 
@@ -36,7 +37,14 @@ def estimate_scan_cost(limit: int, credit_per_lead: int) -> int:
     return limit * credit_per_lead
 
 
-def _to_lead(business: Business, account_id: str, run_id: str) -> Lead:
+def _to_scored_lead(
+    business: Business,
+    persona: Persona,
+    weights: Weights,
+    account_id: str,
+    run_id: str,
+) -> Lead:
+    scores = score_business(business, persona, weights)
     return Lead(
         account_id=account_id,
         run_id=run_id,
@@ -47,6 +55,10 @@ def _to_lead(business: Business, account_id: str, run_id: str) -> Lead:
         website=business.website,
         rating=business.rating,
         review_count=business.review_count,
+        opportunity=scores.opportunity,
+        fit=scores.fit,
+        confidence=scores.confidence,
+        rank=scores.rank,
         source=business.source,
     )
 
@@ -57,6 +69,8 @@ def run_scan(
     *,
     account_id: str,
     territory: Territory,
+    persona: Persona,
+    weights: Weights,
     limit: int,
     credit_per_lead: int,
     max_leads_per_run: int,
@@ -81,7 +95,7 @@ def run_scan(
     businesses = data_provider.search(territory.niche, territory.city, limit)
 
     run_id = new_id()
-    leads = [_to_lead(b, account_id, run_id) for b in businesses]
+    leads = [_to_scored_lead(b, persona, weights, account_id, run_id) for b in businesses]
     cost = len(leads) * credit_per_lead
 
     # Persist results and spend credits in one transaction.

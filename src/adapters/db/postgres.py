@@ -14,7 +14,7 @@ import json
 
 import psycopg
 
-from src.domain.entities import CreditLedgerEntry, Lead, Run
+from src.domain.entities import CreditLedgerEntry, Lead, LeadStatus, Run
 
 
 class _LeadRepo:
@@ -64,15 +64,18 @@ class _LeadRepo:
     def list_for_account(self, account_id: str) -> list[Lead]:
         # RLS already scopes to the current account; account_id arg is a belt-and-braces filter.
         self._cur.execute(
-            "SELECT id, account_id, run_id, name, status, source FROM leads "
-            "WHERE account_id = %s ORDER BY created_at",
+            "SELECT id, account_id, run_id, name, category, rating, review_count, "
+            "opportunity, fit, confidence, rank, status, source "
+            "FROM leads WHERE account_id = %s ORDER BY rank DESC, created_at",
             (account_id,),
         )
         rows = self._cur.fetchall()
         return [
             Lead(
-                id=r[0], account_id=r[1], run_id=r[2], name=r[3],
-                status=r[4], source=r[5],
+                id=r[0], account_id=r[1], run_id=r[2], name=r[3], category=r[4],
+                rating=float(r[5]) if r[5] is not None else None, review_count=r[6],
+                opportunity=r[7], fit=r[8], confidence=r[9], rank=float(r[10]),
+                status=LeadStatus(r[11]), source=r[12],
             )
             for r in rows
         ]
