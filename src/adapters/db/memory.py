@@ -11,15 +11,37 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from src.domain.entities import CreditLedgerEntry, Lead, Run
+from src.domain.entities import Account, CreditLedgerEntry, Lead, Run
 
 
 @dataclass
 class MemoryStore:
     """The shared 'database'. One instance is shared across UnitOfWork sessions."""
+    accounts: list[Account] = field(default_factory=list)
     leads: list[Lead] = field(default_factory=list)
     runs: list[Run] = field(default_factory=list)
     ledger: list[CreditLedgerEntry] = field(default_factory=list)
+
+
+class _AccountRepo:
+    def __init__(self, store: MemoryStore, staged: list[Account]) -> None:
+        self._store = store
+        self._staged = staged
+
+    def add(self, account: Account) -> None:
+        self._staged.append(account)
+
+    def get(self, account_id: str) -> Account | None:
+        return next(
+            (a for a in (*self._store.accounts, *self._staged) if a.id == account_id), None
+        )
+
+    def get_by_owner(self, owner_user_id: str) -> Account | None:
+        return next(
+            (a for a in (*self._store.accounts, *self._staged)
+             if a.owner_user_id == owner_user_id),
+            None,
+        )
 
 
 class _LeadRepo:
@@ -63,9 +85,11 @@ class MemoryUnitOfWork:
         self._store = store
 
     def __enter__(self) -> "MemoryUnitOfWork":
+        self._staged_accounts: list[Account] = []
         self._staged_leads: list[Lead] = []
         self._staged_runs: list[Run] = []
         self._staged_ledger: list[CreditLedgerEntry] = []
+        self.accounts = _AccountRepo(self._store, self._staged_accounts)
         self.leads = _LeadRepo(self._store, self._staged_leads)
         self.runs = _RunRepo(self._staged_runs)
         self.credits = _CreditRepo(self._store, self._staged_ledger)
@@ -73,12 +97,14 @@ class MemoryUnitOfWork:
         return self
 
     def commit(self) -> None:
+        self._store.accounts.extend(self._staged_accounts)
         self._store.leads.extend(self._staged_leads)
         self._store.runs.extend(self._staged_runs)
         self._store.ledger.extend(self._staged_ledger)
         self._committed = True
 
     def rollback(self) -> None:
+        self._staged_accounts.clear()
         self._staged_leads.clear()
         self._staged_runs.clear()
         self._staged_ledger.clear()

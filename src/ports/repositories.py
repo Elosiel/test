@@ -9,7 +9,13 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from src.domain.entities import CreditLedgerEntry, Lead, Run
+from src.domain.entities import Account, CreditLedgerEntry, Lead, Run
+
+
+class AccountRepo(Protocol):
+    def add(self, account: Account) -> None: ...
+    def get(self, account_id: str) -> Account | None: ...
+    def get_by_owner(self, owner_user_id: str) -> Account | None: ...
 
 
 class LeadRepo(Protocol):
@@ -30,6 +36,7 @@ class CreditRepo(Protocol):
 
 @runtime_checkable
 class UnitOfWork(Protocol):
+    accounts: AccountRepo
     leads: LeadRepo
     runs: RunRepo
     credits: CreditRepo

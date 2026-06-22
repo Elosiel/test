@@ -1,16 +1,20 @@
 # Lead///Center
 
-Multi-tenant lead-gen SaaS. This repo currently contains **v1 build-order step 1:
-the skeleton + money spine** — domain entities, ports, a derived-balance credit
-ledger with transactional spend, the `RunScan` use case, an in-memory backend, a
-Postgres + RLS backend, and a thin FastAPI surface. See `ARCHITECTURE.md` for the
-full contract and `CLAUDE.md` for the working standards.
+Multi-tenant lead-gen SaaS. This repo contains build-order **steps 1-2** (spine +
+scoring) plus a **deployable tenant-#1 MVP**: a server-rendered Radar feed dashboard
+with password login. See `ARCHITECTURE.md` for the full contract, `CLAUDE.md` for the
+working standards, and `docs/GOLIVE.md` for the deploy checklist.
 
 ## What works today
 
-`RunScan`: DISCOVER businesses → write N leads → spend N credits, atomically, with
-confirm-before-spend and per-run caps. Tenant isolation is enforced by Postgres RLS
-(`db/schema.sql`). With no database it runs against an in-memory store.
+- **`RunScan`**: DISCOVER → write N leads → spend N credits, atomically, with
+  confirm-before-spend and per-run caps.
+- **Scoring**: deterministic opportunity / fit / confidence → ranked leads.
+- **Radar feed dashboard** (`/`): log in, run a scan, see ranked leads + credit balance.
+- Tenant isolation enforced by Postgres RLS (`db/schema.sql`). Runs against an in-memory
+  store with no database for local dev.
+- ⚠️ Discovery uses a **fake** data provider (flagged "fake data" in the UI) until the
+  Outscraper adapter is wired — see `docs/GOLIVE.md`.
 
 ## Layout
 
@@ -19,11 +23,14 @@ src/domain/        pure entities + errors (no framework/vendor imports)
 src/ports/         interfaces: DataProviderPort, repos, UnitOfWork
 src/application/   credits.py (metering), run_scan.py (use case)
 src/adapters/      fake data provider, in-memory + Postgres UnitOfWork
-src/delivery/api/  FastAPI app (DTOs + routes)
+src/delivery/api/  FastAPI JSON app (DTOs + routes)
+src/delivery/web/  server-rendered Radar feed (HTML, brand-styled)
+src/delivery/auth.py  session-cookie + dev-header auth
 src/config.py      env-driven config (secrets read here only)
-src/main.py        composition root: wires adapters -> ports
+src/main.py        composition root: wires adapters -> ports, bootstraps tenant
 db/schema.sql      tables + Row-Level Security policies
-tests/             unit · application · api · arch · integration (RLS)
+Dockerfile · render.yaml · .github/workflows/ci.yml   deploy + CI
+tests/             unit · application · api · web · arch · integration (RLS)
 ```
 
 ## Setup
@@ -36,17 +43,29 @@ pip install -e ".[dev]"
 ## Run
 
 ```bash
-# In-memory backend (default, no DB):
-uvicorn src.main:app --reload
+# Dashboard (session auth) — in-memory backend, no DB:
+AUTH_MODE=session SESSION_SECRET=$(openssl rand -hex 32) LOGIN_PASSWORD=letmein \
+  uvicorn src.main:app --reload
+# open http://localhost:8000/ and log in with the password above
 
+# JSON API (dev-header auth, default):
+uvicorn src.main:app --reload
 curl -s localhost:8000/scans -H 'X-Account-Id: <uuid>' \
   -H 'content-type: application/json' \
   -d '{"niche":"plumbers","city":"austin","limit":5,"confirmed":true}'
 ```
 
-> Auth is a placeholder `X-Account-Id` header in the spine; Supabase Auth/JWT
-> replaces it in a later step. Vendor adapters (Outscraper, Anthropic, Stripe,
-> email) are not wired yet — `RunScan` uses a clearly-labelled fake data provider.
+> `AUTH_MODE=dev_header` (default) trusts the `X-Account-Id` header — local/tests only.
+> `AUTH_MODE=session` is the production path (password login + signed cookie). Supabase
+> Auth/JWT replaces it for the public SaaS. Vendor adapters (Outscraper, Anthropic,
+> Stripe, email) are not wired yet — discovery uses a labelled fake data provider.
+
+## Deploy
+
+See `docs/GOLIVE.md`. Summary: apply `db/schema.sql` to a Supabase Postgres, set the
+env secrets (`DATABASE_URL`, `SESSION_SECRET`, `LOGIN_PASSWORD`, `AUTH_MODE=session`,
+`LEADCENTER_BACKEND=postgres`), and deploy the `Dockerfile` to Render/Railway (**not**
+Vercel — persistent server).
 
 ## Test
 

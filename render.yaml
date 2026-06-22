@@ -1,0 +1,24 @@
+# Render blueprint. Also deployable on Railway via the same Dockerfile.
+# Set the `sync: false` secrets in the dashboard — never commit them.
+services:
+  - type: web
+    name: leadcenter
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: LEADCENTER_BACKEND
+        value: postgres
+      - key: AUTH_MODE
+        value: session
+      - key: DATABASE_URL          # Supabase Postgres connection string
+        sync: false
+      - key: SESSION_SECRET        # long random string
+        sync: false
+      - key: LOGIN_PASSWORD        # tenant-#1 dashboard password
+        sync: false
+      - key: TENANT_NAME
+        value: FLUXO
+      - key: LEADCENTER_FREE_CREDITS
+        value: "50"

@@ -7,8 +7,10 @@ from typing import Callable
 
 from src.adapters.data.fake_data_provider import FakeDataProvider
 from src.adapters.db.memory import MemoryStore, MemoryUnitOfWork
+from src.application.accounts import ensure_tenant
 from src.config import Config, load_config
-from src.delivery.api.app import Deps, create_app
+from src.delivery.api.app import create_app
+from src.delivery.deps import Deps
 from src.ports.repositories import UnitOfWork
 
 
@@ -40,9 +42,21 @@ def build_deps(config: Config) -> Deps:
     return Deps(config=config, data_provider=data_provider, uow_factory_for=uow_factory_for)
 
 
+def bootstrap_tenant(config: Config, deps: Deps) -> None:
+    """Ensure the single tenant account exists with its free credits. Idempotent."""
+    with deps.uow_factory_for(config.tenant_owner_user_id)() as uow:
+        ensure_tenant(
+            uow, config.tenant_owner_user_id, config.tenant_name, config.free_credits
+        )
+        uow.commit()
+
+
 def build_app():
     config = load_config()
-    return create_app(build_deps(config))
+    deps = build_deps(config)
+    if config.auth_mode == "session":
+        bootstrap_tenant(config, deps)
+    return create_app(deps)
 
 
 # `uvicorn src.main:app` for local serving.

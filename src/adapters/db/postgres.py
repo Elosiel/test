@@ -14,7 +14,40 @@ import json
 
 import psycopg
 
-from src.domain.entities import CreditLedgerEntry, Lead, LeadStatus, Run
+from src.domain.entities import Account, CreditLedgerEntry, Lead, LeadStatus, Run
+
+
+class _AccountRepo:
+    def __init__(self, cur: psycopg.Cursor) -> None:
+        self._cur = cur
+
+    def add(self, account: Account) -> None:
+        self._cur.execute(
+            "INSERT INTO accounts (id, owner_user_id, name, created_at) "
+            "VALUES (%s, %s, %s, %s)",
+            (account.id, account.owner_user_id, account.name, account.created_at),
+        )
+
+    def get(self, account_id: str) -> Account | None:
+        self._cur.execute(
+            "SELECT id, owner_user_id, name, created_at FROM accounts WHERE id = %s",
+            (account_id,),
+        )
+        return self._row_to_account(self._cur.fetchone())
+
+    def get_by_owner(self, owner_user_id: str) -> Account | None:
+        self._cur.execute(
+            "SELECT id, owner_user_id, name, created_at FROM accounts "
+            "WHERE owner_user_id = %s",
+            (owner_user_id,),
+        )
+        return self._row_to_account(self._cur.fetchone())
+
+    @staticmethod
+    def _row_to_account(row) -> Account | None:
+        if row is None:
+            return None
+        return Account(id=str(row[0]), owner_user_id=row[1], name=row[2], created_at=row[3])
 
 
 class _LeadRepo:
@@ -134,6 +167,7 @@ class PostgresUnitOfWork:
         self._cur.execute(
             "SELECT set_config('app.current_account_id', %s, true)", (self._account_id,)
         )
+        self.accounts = _AccountRepo(self._cur)
         self.leads = _LeadRepo(self._cur)
         self.runs = _RunRepo(self._cur)
         self.credits = _CreditRepo(self._cur)

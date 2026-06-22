@@ -7,29 +7,14 @@ It is clearly a stand-in, not production auth.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable
-
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from src.application import credits
-from src.application.run_scan import RunScanResult, run_scan
-from src.config import Config
-from src.domain.entities import Persona, Territory
+from src.application.run_scan import RunScanResult
+from src.delivery.auth import make_current_account
+from src.delivery.deps import Deps, ScanParams, execute_scan
 from src.domain.errors import ConfirmationRequiredError, InsufficientCreditsError
-from src.domain.scoring import Weights
-from src.ports.data_provider import DataProviderPort
-from src.ports.repositories import UnitOfWork
-
-
-@dataclass
-class Deps:
-    """Everything the routes need, wired at the composition root."""
-    config: Config
-    data_provider: DataProviderPort
-    # account_id -> UnitOfWork, so each request's transactions are tenant-scoped.
-    uow_factory_for: Callable[[str], Callable[[], UnitOfWork]]
 
 
 class ScanRequest(BaseModel):
@@ -70,14 +55,12 @@ class BalanceResponse(BaseModel):
     balance: int
 
 
-def require_account(x_account_id: str | None = Header(default=None)) -> str:
-    if not x_account_id:
-        raise HTTPException(status_code=401, detail="missing X-Account-Id header")
-    return x_account_id
-
-
 def create_app(deps: Deps) -> FastAPI:
+    from src.delivery.web.routes import create_web_router
+
     app = FastAPI(title="Lead///Center", version="0.1.0")
+    require_account = make_current_account(deps.config)
+    app.include_router(create_web_router(deps))
 
     @app.get("/healthz")
     def healthz() -> dict:
@@ -93,35 +76,13 @@ def create_app(deps: Deps) -> FastAPI:
     def post_scan(
         body: ScanRequest, account_id: str = Depends(require_account)
     ) -> ScanResponse:
-        territory = Territory(
-            account_id=account_id, persona_id="", niche=body.niche, city=body.city
-        )
-        persona = Persona(
-            account_id=account_id,
-            name="inline",
-            target_category=body.target_category or body.niche,
-            geo=body.geo or body.city,
-            keywords=body.keywords,
-            size_hint=body.size_hint,
-        )
-        weights = Weights(
-            opportunity=deps.config.weight_opportunity,
-            fit=deps.config.weight_fit,
-            confidence=deps.config.weight_confidence,
+        params = ScanParams(
+            niche=body.niche, city=body.city, limit=body.limit, confirmed=body.confirmed,
+            target_category=body.target_category, geo=body.geo,
+            keywords=body.keywords, size_hint=body.size_hint,
         )
         try:
-            result: RunScanResult = run_scan(
-                deps.uow_factory_for(account_id),
-                deps.data_provider,
-                account_id=account_id,
-                territory=territory,
-                persona=persona,
-                weights=weights,
-                limit=body.limit,
-                credit_per_lead=deps.config.credit_per_lead,
-                max_leads_per_run=deps.config.max_leads_per_run,
-                confirmed=body.confirmed,
-            )
+            result: RunScanResult = execute_scan(deps, account_id, params)
         except ConfirmationRequiredError as e:
             # 402 Payment Required: surface the estimate so the client can confirm.
             raise HTTPException(
