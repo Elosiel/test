@@ -94,24 +94,48 @@ class _LeadRepo:
             },
         )
 
+    _SELECT = (
+        "SELECT id, account_id, run_id, name, category, rating, review_count, "
+        "opportunity, fit, confidence, rank, status, source, "
+        "primary_gap, hot_signal, fresh_pain_json, pitch FROM leads"
+    )
+
+    @staticmethod
+    def _row_to_lead(r) -> Lead:
+        return Lead(
+            id=str(r[0]), account_id=str(r[1]), run_id=str(r[2]) if r[2] else "",
+            name=r[3], category=r[4],
+            rating=float(r[5]) if r[5] is not None else None, review_count=r[6],
+            opportunity=r[7], fit=r[8], confidence=r[9], rank=float(r[10]),
+            status=LeadStatus(r[11]), source=r[12],
+            primary_gap=r[13], hot_signal=r[14], fresh_pain=r[15], pitch=r[16],
+        )
+
     def list_for_account(self, account_id: str) -> list[Lead]:
         # RLS already scopes to the current account; account_id arg is a belt-and-braces filter.
         self._cur.execute(
-            "SELECT id, account_id, run_id, name, category, rating, review_count, "
-            "opportunity, fit, confidence, rank, status, source "
-            "FROM leads WHERE account_id = %s ORDER BY rank DESC, created_at",
+            f"{self._SELECT} WHERE account_id = %s ORDER BY rank DESC, created_at",
             (account_id,),
         )
-        rows = self._cur.fetchall()
-        return [
-            Lead(
-                id=r[0], account_id=r[1], run_id=r[2], name=r[3], category=r[4],
-                rating=float(r[5]) if r[5] is not None else None, review_count=r[6],
-                opportunity=r[7], fit=r[8], confidence=r[9], rank=float(r[10]),
-                status=LeadStatus(r[11]), source=r[12],
-            )
-            for r in rows
-        ]
+        return [self._row_to_lead(r) for r in self._cur.fetchall()]
+
+    def get(self, account_id: str, lead_id: str) -> Lead | None:
+        self._cur.execute(
+            f"{self._SELECT} WHERE account_id = %s AND id = %s", (account_id, lead_id)
+        )
+        row = self._cur.fetchone()
+        return self._row_to_lead(row) if row else None
+
+    def update(self, lead: Lead) -> None:
+        self._cur.execute(
+            "UPDATE leads SET pitch = %s, primary_gap = %s, hot_signal = %s, "
+            "fresh_pain_json = %s, status = %s WHERE id = %s AND account_id = %s",
+            (
+                lead.pitch, lead.primary_gap, lead.hot_signal,
+                json.dumps(lead.fresh_pain) if lead.fresh_pain else None,
+                lead.status.value, lead.id, lead.account_id,
+            ),
+        )
 
 
 class _RunRepo:

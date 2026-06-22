@@ -11,9 +11,11 @@ from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from src.application import credits
+from src.application.pitch import LeadNotFoundError, draft_pitch
 from src.application.run_scan import RunScanResult
 from src.delivery.auth import make_current_account
 from src.delivery.deps import Deps, ScanParams, execute_scan
+from src.domain.entities import Lead
 from src.domain.errors import ConfirmationRequiredError, InsufficientCreditsError
 
 
@@ -48,6 +50,18 @@ class LeadDTO(BaseModel):
     confidence: int
     rank: float
     status: str
+    hot_signal: bool
+    primary_gap: str | None
+    pitch: str | None
+
+    @classmethod
+    def from_lead(cls, l: Lead) -> "LeadDTO":
+        return cls(
+            id=l.id, name=l.name, category=l.category, rating=l.rating,
+            review_count=l.review_count, opportunity=l.opportunity, fit=l.fit,
+            confidence=l.confidence, rank=l.rank, status=l.status.value,
+            hot_signal=l.hot_signal, primary_gap=l.primary_gap, pitch=l.pitch,
+        )
 
 
 class BalanceResponse(BaseModel):
@@ -106,20 +120,26 @@ def create_app(deps: Deps) -> FastAPI:
         with uow_factory() as uow:
             leads = uow.leads.list_for_account(account_id)
         leads.sort(key=lambda l: l.rank, reverse=True)
-        return [
-            LeadDTO(
-                id=l.id,
-                name=l.name,
-                category=l.category,
-                rating=l.rating,
-                review_count=l.review_count,
-                opportunity=l.opportunity,
-                fit=l.fit,
-                confidence=l.confidence,
-                rank=l.rank,
-                status=l.status.value,
+        return [LeadDTO.from_lead(l) for l in leads]
+
+    @app.post("/leads/{lead_id}/pitch", response_model=LeadDTO)
+    def post_pitch(lead_id: str, account_id: str = Depends(require_account)) -> LeadDTO:
+        try:
+            lead = draft_pitch(
+                deps.uow_factory_for(account_id),
+                deps.ai,
+                account_id=account_id,
+                lead_id=lead_id,
+                credit_per_pitch=deps.config.credit_per_pitch,
             )
-            for l in leads
-        ]
+        except LeadNotFoundError:
+            raise HTTPException(status_code=404, detail="lead not found")
+        except InsufficientCreditsError as e:
+            raise HTTPException(
+                status_code=402,
+                detail={"error": "insufficient_credits", "required": e.required,
+                        "available": e.available},
+            )
+        return LeadDTO.from_lead(lead)
 
     return app

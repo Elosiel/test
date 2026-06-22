@@ -11,6 +11,7 @@ from src.application.run_scan import RunScanResult, run_scan
 from src.config import Config
 from src.domain.entities import Persona, Territory
 from src.domain.scoring import Weights
+from src.ports.ai import AIPort
 from src.ports.data_provider import DataProviderPort
 from src.ports.repositories import UnitOfWork
 
@@ -20,6 +21,7 @@ class Deps:
     """Everything the routes need, wired at the composition root."""
     config: Config
     data_provider: DataProviderPort
+    ai: AIPort
     # account_id -> UnitOfWork factory, so each request's transactions are tenant-scoped.
     uow_factory_for: Callable[[str], Callable[[], UnitOfWork]]
 

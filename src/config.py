@@ -21,9 +21,16 @@ class Config:
     backend: str = os.environ.get("LEADCENTER_BACKEND", "memory")
     database_url: str | None = os.environ.get("DATABASE_URL")
 
-    # Credit economics. The spine bills exactly one credit per lead written.
+    # Credit economics. The spine bills one credit per lead written, and one per
+    # AI-drafted pitch.
     free_credits: int = _int_env("LEADCENTER_FREE_CREDITS", 50)
     credit_per_lead: int = 1
+    credit_per_pitch: int = 1
+
+    # AI model id for the real adapter (the fake adapter ignores it). The latest
+    # Haiku per ARCHITECTURE.md's AIPort note; verify via the claude-api skill when
+    # the Anthropic adapter is built.
+    model_id: str = os.environ.get("MODEL_ID", "claude-haiku-4-5")
 
     # Score-blend weights live here so the deterministic core stays config-driven.
     # (Scoring itself lands in build-order step 2; weights are declared now.)

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import Callable
 
+from src.adapters.ai.fake_ai_adapter import FakeAI
 from src.adapters.data.fake_data_provider import FakeDataProvider
 from src.adapters.db.memory import MemoryStore, MemoryUnitOfWork
 from src.application.accounts import ensure_tenant
@@ -39,7 +40,12 @@ def build_deps(config: Config) -> Deps:
         uow_factory_for = _postgres_uow_factory_for(config.database_url)
     else:
         uow_factory_for = _memory_uow_factory_for(MemoryStore())
-    return Deps(config=config, data_provider=data_provider, uow_factory_for=uow_factory_for)
+    return Deps(
+        config=config,
+        data_provider=data_provider,
+        ai=FakeAI(),  # real Anthropic Haiku adapter swaps in here later
+        uow_factory_for=uow_factory_for,
+    )
 
 
 def bootstrap_tenant(config: Config, deps: Deps) -> None:

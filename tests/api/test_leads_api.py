@@ -6,6 +6,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from src.adapters.ai.fake_ai_adapter import FakeAI
 from src.adapters.data.fake_data_provider import FakeDataProvider
 from src.adapters.db.memory import MemoryStore, MemoryUnitOfWork
 from src.application import credits
@@ -25,6 +26,7 @@ def client_and_accounts():
     deps = Deps(
         config=Config(backend="memory"),
         data_provider=FakeDataProvider(),
+        ai=FakeAI(),
         uow_factory_for=lambda _acct: (lambda: MemoryUnitOfWork(store)),
     )
     return TestClient(create_app(deps)), a, b

@@ -71,6 +71,16 @@ class Run:
 
 
 @dataclass(frozen=True)
+class Review:
+    """A single review, as carried on a Business for signal/scoring. ``age_days`` is
+    how long ago it was posted; ``has_owner_reply`` whether the business answered it.
+    """
+    rating: float
+    age_days: int
+    has_owner_reply: bool = False
+
+
+@dataclass(frozen=True)
 class Business:
     """A value object returned by the DataProviderPort, before it becomes a Lead.
     Carries no ``account_id`` — it is provider data, not yet tenant-owned.
@@ -84,6 +94,7 @@ class Business:
     review_count: int | None = None
     source: str = "unknown"
     external_id: str | None = None
+    reviews: list[Review] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

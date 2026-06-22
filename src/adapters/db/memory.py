@@ -55,6 +55,17 @@ class _LeadRepo:
     def list_for_account(self, account_id: str) -> list[Lead]:
         return [l for l in (*self._store.leads, *self._staged) if l.account_id == account_id]
 
+    def get(self, account_id: str, lead_id: str) -> Lead | None:
+        return next(
+            (l for l in (*self._store.leads, *self._staged)
+             if l.id == lead_id and l.account_id == account_id),
+            None,
+        )
+
+    def update(self, lead: Lead) -> None:
+        # Stage the new value; commit replaces the stored row with the same id.
+        self._staged.append(lead)
+
 
 class _RunRepo:
     def __init__(self, staged: list[Run]) -> None:
@@ -98,7 +109,14 @@ class MemoryUnitOfWork:
 
     def commit(self) -> None:
         self._store.accounts.extend(self._staged_accounts)
-        self._store.leads.extend(self._staged_leads)
+        # Leads upsert by id so update() replaces rather than duplicates.
+        by_id = {l.id: i for i, l in enumerate(self._store.leads)}
+        for lead in self._staged_leads:
+            if lead.id in by_id:
+                self._store.leads[by_id[lead.id]] = lead
+            else:
+                by_id[lead.id] = len(self._store.leads)
+                self._store.leads.append(lead)
         self._store.runs.extend(self._staged_runs)
         self._store.ledger.extend(self._staged_ledger)
         self._committed = True

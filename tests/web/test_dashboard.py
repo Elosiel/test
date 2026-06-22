@@ -6,6 +6,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from src.adapters.ai.fake_ai_adapter import FakeAI
 from src.adapters.data.fake_data_provider import FakeDataProvider
 from src.adapters.db.memory import MemoryStore, MemoryUnitOfWork
 from src.application.accounts import ensure_tenant
@@ -28,6 +29,7 @@ def client():
     deps = Deps(
         config=config,
         data_provider=FakeDataProvider(),
+        ai=FakeAI(),
         uow_factory_for=lambda _acct: (lambda: MemoryUnitOfWork(store)),
     )
     with MemoryUnitOfWork(store) as uow:
@@ -88,6 +90,26 @@ def test_unconfirmed_scan_shows_estimate_error(client):
     )
     assert r.status_code == 200
     assert "confirm spend" in r.text or "credits" in r.text
+
+
+def test_hot_badge_and_draft_flow(client):
+    _login(client)
+    client.post(
+        "/scan",
+        data={"niche": "plumbers", "city": "austin", "limit": "3", "confirmed": "1"},
+        follow_redirects=False,
+    )
+    dash = client.get("/").text
+    assert "🔥" in dash  # at least one hot lead from the fake provider
+    assert ">Draft<" in dash  # draft buttons present
+
+    # Grab a lead id from the JSON API (same store) and draft via the web route.
+    import re
+    m = re.search(r"/leads/([0-9a-f-]+)/draft", dash)
+    assert m
+    r = client.post(f"/leads/{m.group(1)}/draft", follow_redirects=False)
+    assert r.status_code == 303
+    assert "pitch" in client.get("/").text.lower()
 
 
 def test_logout_clears_session(client):

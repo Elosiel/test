@@ -11,6 +11,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from src.application import credits
+from src.application.pitch import LeadNotFoundError, draft_pitch
 from src.delivery.auth import (
     COOKIE_NAME,
     SESSION_TTL_SECONDS,
@@ -115,6 +116,28 @@ def create_web_router(deps: Deps) -> APIRouter:
         except ValueError as e:
             return _render_dashboard(account_id, error=str(e))
         # Post/Redirect/Get so a refresh doesn't re-run (and re-bill) the scan.
+        return RedirectResponse("/", status_code=303)
+
+    @router.post("/leads/{lead_id}/draft")
+    def draft(lead_id: str, request: Request):
+        account_id = resolve_account(config, request)
+        if not account_id:
+            return RedirectResponse("/login", status_code=303)
+        try:
+            draft_pitch(
+                deps.uow_factory_for(account_id),
+                deps.ai,
+                account_id=account_id,
+                lead_id=lead_id,
+                credit_per_pitch=config.credit_per_pitch,
+            )
+        except LeadNotFoundError:
+            return _render_dashboard(account_id, error="Lead not found.")
+        except InsufficientCreditsError as e:
+            return _render_dashboard(
+                account_id,
+                error=f"Not enough credits to draft: need {e.required}, have {e.available}.",
+            )
         return RedirectResponse("/", status_code=303)
 
     return router

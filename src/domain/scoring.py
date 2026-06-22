@@ -44,7 +44,8 @@ def blend(opportunity: int, fit: int, confidence: int, weights: Weights) -> floa
 def score_business(business: Business, persona: Persona, weights: Weights) -> ScoreResult:
     has_website = bool(business.website)
     opportunity = opportunity_score(
-        business.rating, business.review_count, has_website=has_website
+        business.rating, business.review_count,
+        has_website=has_website, reviews=business.reviews,
     )
     fit = fit_score(business, persona)
     # At discovery time we hold no email yet; confidence reflects what we have now

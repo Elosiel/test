@@ -5,6 +5,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from src.domain.entities import Review
 from src.domain.opportunity import opportunity_score
 
 
@@ -37,10 +38,31 @@ def test_review_count_caps_out():
     assert at_cap == over_cap
 
 
+def test_recent_reviews_raise_vigor():
+    recent = opportunity_score(
+        3.0, 50, has_website=True, reviews=[Review(rating=3.0, age_days=2)]
+    )
+    stale = opportunity_score(
+        3.0, 50, has_website=True, reviews=[Review(rating=3.0, age_days=120)]
+    )
+    assert recent > stale
+
+
+def test_missing_reviews_keep_vigor_neutral():
+    # No reviews -> Vigor neutral; score close to the no-reviews-arg path.
+    a = opportunity_score(3.0, 50, has_website=True)
+    b = opportunity_score(3.0, 50, has_website=True, reviews=[])
+    assert a == b
+
+
 @given(
     rating=st.one_of(st.none(), st.floats(min_value=0, max_value=5)),
     reviews=st.one_of(st.none(), st.integers(min_value=0, max_value=1_000_000)),
     has_website=st.booleans(),
+    age=st.integers(min_value=0, max_value=10_000),
 )
-def test_always_within_bounds(rating, reviews, has_website):
-    assert 0 <= opportunity_score(rating, reviews, has_website=has_website) <= 100
+def test_always_within_bounds(rating, reviews, has_website, age):
+    review_list = [Review(rating=2.0, age_days=age)]
+    assert 0 <= opportunity_score(
+        rating, reviews, has_website=has_website, reviews=review_list
+    ) <= 100

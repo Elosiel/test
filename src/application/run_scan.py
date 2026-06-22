@@ -18,7 +18,9 @@ from typing import Callable
 from src.application import credits
 from src.domain.entities import Business, Lead, Persona, Run, Territory, new_id
 from src.domain.errors import ConfirmationRequiredError, InsufficientCreditsError
+from src.domain.gaps import primary_gap
 from src.domain.scoring import Weights, score_business
+from src.domain.signals import detect_fresh_pain
 from src.ports.data_provider import DataProviderPort
 from src.ports.repositories import UnitOfWork
 
@@ -45,6 +47,7 @@ def _to_scored_lead(
     run_id: str,
 ) -> Lead:
     scores = score_business(business, persona, weights)
+    fresh_pain = detect_fresh_pain(business.reviews)
     return Lead(
         account_id=account_id,
         run_id=run_id,
@@ -59,6 +62,9 @@ def _to_scored_lead(
         fit=scores.fit,
         confidence=scores.confidence,
         rank=scores.rank,
+        primary_gap=primary_gap(business),
+        hot_signal=fresh_pain is not None,
+        fresh_pain=fresh_pain,
         source=business.source,
     )
 

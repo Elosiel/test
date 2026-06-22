@@ -11,7 +11,7 @@ import pytest
 from src.adapters.data.fake_data_provider import FakeDataProvider
 from src.application import credits
 from src.application.run_scan import run_scan
-from src.domain.entities import Business, Persona, Territory
+from src.domain.entities import Business, Persona, Review, Territory
 from src.domain.errors import ConfirmationRequiredError, InsufficientCreditsError
 from src.domain.scoring import Weights
 
@@ -54,6 +54,23 @@ def test_scan_writes_leads_and_spends_credits(store, uow_factory, account_id, gr
     with uow_factory() as uow:
         assert credits.balance(uow, account_id) == 40
         assert len(uow.leads.list_for_account(account_id)) == 10
+
+
+def test_recent_bad_review_yields_hot_signal_and_gap(store, uow_factory, account_id, grant_credits):
+    grant_credits(account_id, 50)
+
+    class HotProvider:
+        def search(self, niche, city, limit):
+            return [Business(name="Acme", category="plumbers", address="1 St, Austin",
+                             website=None, rating=2.5, review_count=4,
+                             reviews=[Review(rating=2.0, age_days=3, has_owner_reply=False)])]
+
+    _run(uow_factory, HotProvider(), account_id, limit=1)
+    with uow_factory() as uow:
+        lead = uow.leads.list_for_account(account_id)[0]
+    assert lead.hot_signal is True
+    assert lead.fresh_pain and lead.fresh_pain["review_age_days"] == 3
+    assert lead.primary_gap == "no website"
 
 
 def test_written_leads_are_scored_and_ranked(store, uow_factory, account_id, grant_credits):

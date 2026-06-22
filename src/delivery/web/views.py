@@ -37,6 +37,7 @@ _STYLE = f"""
   .rank {{ color: {_ACCENT}; font-weight: 700; }}
   .badge {{ font-size: .7rem; padding: .1rem .4rem; border: 1px solid #444; border-radius: 4px;
             color: #b59; }}
+  .pitch {{ white-space: pre-wrap; font-size: .8rem; color: #cfcfcf; max-width: 40ch; }}
   .msg {{ color: {_ACCENT}; margin-bottom: 1rem; }}
   .err {{ color: #ff6b6b; margin-bottom: 1rem; }}
   .note {{ color: #777; font-size: .8rem; margin-top: 2rem; }}
@@ -71,6 +72,16 @@ def _fake_badge(source: str) -> str:
     return ""
 
 
+def _pitch_cell(lead: Lead) -> str:
+    """Either the drafted pitch text, or a Draft button to generate one."""
+    if lead.pitch:
+        return f"<div class='pitch'>{escape(lead.pitch)}</div>"
+    return (
+        f"<form method='post' action='/leads/{escape(lead.id)}/draft' style='margin:0'>"
+        "<button type='submit'>Draft</button></form>"
+    )
+
+
 def render_dashboard(
     account_name: str, balance: int, leads: list[Lead],
     message: str | None = None, error: str | None = None,
@@ -81,10 +92,10 @@ def render_dashboard(
     rows = "".join(
         "<tr>"
         f"<td class='rank'>{l.rank:.1f}</td>"
-        f"<td>{escape(l.name)}{_fake_badge(l.source)}</td>"
+        f"<td>{'🔥 ' if l.hot_signal else ''}{escape(l.name)}{_fake_badge(l.source)}</td>"
         f"<td>{escape(l.category or '—')}</td>"
         f"<td>{l.opportunity}</td><td>{l.fit}</td><td>{l.confidence}</td>"
-        f"<td>{escape(l.status.value)}</td>"
+        f"<td>{_pitch_cell(l)}</td>"
         "</tr>"
         for l in leads
     ) or "<tr><td colspan='7'>No leads yet — run a scan above.</td></tr>"
@@ -109,7 +120,7 @@ def render_dashboard(
         "<h2>Radar feed <span class='sep'>///</span> ranked leads</h2>"
         "<table><thead><tr>"
         "<th>rank</th><th>name</th><th>category</th><th>opp</th><th>fit</th>"
-        "<th>conf</th><th>status</th>"
+        "<th>conf</th><th>pitch</th>"
         "</tr></thead><tbody>"
         f"{rows}"
         "</tbody></table>"
