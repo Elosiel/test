@@ -16,6 +16,7 @@ from src.domain.entities import (
     CreditLedgerEntry,
     Lead,
     Message,
+    Pack,
     Run,
     Suppression,
 )
@@ -30,6 +31,7 @@ class MemoryStore:
     ledger: list[CreditLedgerEntry] = field(default_factory=list)
     messages: list[Message] = field(default_factory=list)
     suppression: list[Suppression] = field(default_factory=list)
+    packs: list[Pack] = field(default_factory=list)
 
 
 class _AccountRepo:
@@ -127,6 +129,34 @@ class _CreditRepo:
             if e.account_id == account_id
         )
 
+    def event_exists(self, stripe_event_id: str) -> bool:
+        return any(
+            e.stripe_event_id == stripe_event_id
+            for e in (*self._store.ledger, *self._staged)
+        )
+
+
+class _PackRepo:
+    def __init__(self, store: MemoryStore, staged: list[Pack]) -> None:
+        self._store = store
+        self._staged = staged
+
+    def add(self, pack: Pack) -> None:
+        self._staged.append(pack)
+
+    def get(self, pack_id: str) -> Pack | None:
+        return next(
+            (p for p in (*self._store.packs, *self._staged) if p.id == pack_id), None
+        )
+
+    def get_by_name(self, name: str) -> Pack | None:
+        return next(
+            (p for p in (*self._store.packs, *self._staged) if p.name == name), None
+        )
+
+    def list_active(self) -> list[Pack]:
+        return [p for p in (*self._store.packs, *self._staged) if p.active]
+
 
 class MemoryUnitOfWork:
     def __init__(self, store: MemoryStore) -> None:
@@ -139,12 +169,14 @@ class MemoryUnitOfWork:
         self._staged_ledger: list[CreditLedgerEntry] = []
         self._staged_messages: list[Message] = []
         self._staged_suppression: list[Suppression] = []
+        self._staged_packs: list[Pack] = []
         self.accounts = _AccountRepo(self._store, self._staged_accounts)
         self.leads = _LeadRepo(self._store, self._staged_leads)
         self.runs = _RunRepo(self._staged_runs)
         self.credits = _CreditRepo(self._store, self._staged_ledger)
         self.messages = _MessageRepo(self._staged_messages)
         self.suppression = _SuppressionRepo(self._store, self._staged_suppression)
+        self.packs = _PackRepo(self._store, self._staged_packs)
         self._committed = False
         return self
 
@@ -162,15 +194,23 @@ class MemoryUnitOfWork:
         self._store.ledger.extend(self._staged_ledger)
         self._store.messages.extend(self._staged_messages)
         self._store.suppression.extend(self._staged_suppression)
+        self._store.packs.extend(self._staged_packs)
+        # Clear staged so a second commit() on this UoW is a safe no-op (e.g. a use
+        # case commits, then the caller commits again).
+        self._clear_staged()
         self._committed = True
 
-    def rollback(self) -> None:
+    def _clear_staged(self) -> None:
         self._staged_accounts.clear()
         self._staged_leads.clear()
         self._staged_runs.clear()
         self._staged_ledger.clear()
         self._staged_messages.clear()
         self._staged_suppression.clear()
+        self._staged_packs.clear()
+
+    def rollback(self) -> None:
+        self._clear_staged()
 
     def __exit__(self, exc_type, exc, tb) -> bool:
         if not self._committed:

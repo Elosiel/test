@@ -15,6 +15,7 @@ from src.ports.ai import AIPort
 from src.ports.data_provider import DataProviderPort
 from src.ports.email_finder import EmailFinderPort
 from src.ports.email_sender import EmailSenderPort
+from src.ports.payments import PaymentsPort
 from src.ports.repositories import UnitOfWork
 
 
@@ -29,6 +30,8 @@ class Deps:
     # Outreach ports (step 5). Optional so non-outreach wiring/tests can omit them.
     email_finder: EmailFinderPort | None = None
     email_sender: EmailSenderPort | None = None
+    # Payments port (step 6). Optional like the outreach ports.
+    payments: PaymentsPort | None = None
 
 
 @dataclass

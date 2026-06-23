@@ -9,7 +9,9 @@ from fastapi.testclient import TestClient
 from src.adapters.ai.fake_ai_adapter import FakeAI
 from src.adapters.data.fake_data_provider import FakeDataProvider
 from src.adapters.db.memory import MemoryStore, MemoryUnitOfWork
+from src.adapters.payments.fake_payments import FakePayments
 from src.application.accounts import ensure_tenant
+from src.application.payments import ensure_packs
 from src.config import Config
 from src.delivery.api.app import create_app
 from src.delivery.deps import Deps
@@ -31,9 +33,11 @@ def client():
         data_provider=FakeDataProvider(),
         ai=FakeAI(),
         uow_factory_for=lambda _acct: (lambda: MemoryUnitOfWork(store)),
+        payments=FakePayments(),
     )
     with MemoryUnitOfWork(store) as uow:
         ensure_tenant(uow, config.tenant_owner_user_id, config.tenant_name, config.free_credits)
+        ensure_packs(uow)
         uow.commit()
     return TestClient(create_app(deps))
 
@@ -110,6 +114,18 @@ def test_hot_badge_and_draft_flow(client):
     r = client.post(f"/leads/{m.group(1)}/draft", follow_redirects=False)
     assert r.status_code == 303
     assert "pitch" in client.get("/").text.lower()
+
+
+def test_buy_credits_packs_render_and_redirect(client):
+    _login(client)
+    import re
+    dash = client.get("/").text
+    assert "Buy credits" in dash
+    m = re.search(r"/buy/([0-9a-f-]+)", dash)
+    assert m
+    r = client.post(f"/buy/{m.group(1)}", follow_redirects=False)
+    assert r.status_code == 303
+    assert "session_id=" in r.headers["location"]  # handed to (fake) checkout
 
 
 def test_logout_clears_session(client):

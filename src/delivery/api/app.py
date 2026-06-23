@@ -7,12 +7,13 @@ It is clearly a stand-in, not production auth.
 """
 from __future__ import annotations
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from src.application import credits
 from src.application.outreach import contact_lead, unsubscribe
+from src.application.payments import PackNotFoundError, handle_webhook, list_active_packs, start_checkout
 from src.application.pitch import draft_pitch
 from src.application.run_scan import RunScanResult
 from src.delivery.auth import make_current_account
@@ -80,6 +81,21 @@ class LeadDTO(BaseModel):
 class BalanceResponse(BaseModel):
     account_id: str
     balance: int
+
+
+class PackDTO(BaseModel):
+    id: str
+    name: str
+    credits: int
+    price_cents: int
+
+
+class CheckoutRequest(BaseModel):
+    pack_id: str
+
+
+class CheckoutResponse(BaseModel):
+    checkout_url: str
 
 
 def create_app(deps: Deps) -> FastAPI:
@@ -187,5 +203,41 @@ def create_app(deps: Deps) -> FastAPI:
         """Public (no auth) CAN-SPAM opt-out. Adds the address to suppression."""
         unsubscribe(deps.uow_factory_for(account), account, email)
         return "You have been unsubscribed. You will receive no further emails."
+
+    @app.get("/packs", response_model=list[PackDTO])
+    def get_packs() -> list[PackDTO]:
+        return [
+            PackDTO(id=p.id, name=p.name, credits=p.credits, price_cents=p.price_cents)
+            for p in list_active_packs(deps.uow_factory_for(""))
+        ]
+
+    @app.post("/checkout", response_model=CheckoutResponse)
+    def post_checkout(
+        body: CheckoutRequest, account_id: str = Depends(require_account)
+    ) -> CheckoutResponse:
+        try:
+            session = start_checkout(
+                deps.uow_factory_for(account_id), deps.payments,
+                account_id=account_id, pack_id=body.pack_id,
+                success_url=deps.config.checkout_success_url,
+                cancel_url=deps.config.checkout_cancel_url,
+            )
+        except PackNotFoundError:
+            raise HTTPException(status_code=404, detail="pack not found")
+        return CheckoutResponse(checkout_url=session.url)
+
+    @app.post("/webhooks/stripe")
+    async def stripe_webhook(request: Request) -> dict:
+        """Public, unauthenticated (as Stripe webhooks are). Idempotent on event.id."""
+        payload = await request.body()
+        signature = request.headers.get("stripe-signature")
+        try:
+            granted = handle_webhook(
+                deps.uow_factory_for, deps.payments, payload, signature
+            )
+        except ValueError:
+            # Bad signature / unparseable payload.
+            raise HTTPException(status_code=400, detail="invalid webhook")
+        return {"granted": granted}
 
     return app

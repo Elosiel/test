@@ -53,10 +53,18 @@ on **fake** email adapters. To turn it on:
   and an `EmailFinderPort` (Hunter/site-crawl), and **warm a sending domain with
   SPF/DKIM/DMARC**. The `GET /unsubscribe` endpoint and suppression list are already wired.
 
+## Payments (step 6) — built, on a fake adapter
+Packs catalog, checkout, and an **idempotent** webhook→ledger grant are implemented and
+seeded at startup. To go real: write a Stripe `PaymentsPort` adapter (Checkout Session +
+**signature-verified** webhook on `STRIPE_WEBHOOK_SECRET`), set the keys, and point a
+Stripe webhook at `POST /webhooks/stripe`. The ledger's `UNIQUE(stripe_event_id)` already
+guarantees a replayed event can't double-grant. Calibrate pack prices once COGS is measured
+(an OPEN item in ARCHITECTURE.md).
+
 ## Not done yet — required before a PUBLIC launch (later passes)
 - **Real adapters** — Outscraper (data), Anthropic Haiku (pitch), Resend/Postmark + Hunter
-  (outreach). All exist as ports with fakes; each needs your key + a small dependency.
-- **Backend step 6** — Stripe credit packs + idempotent webhook ledger.
+  (outreach), Stripe (payments). All exist as ports with fakes; each needs your key + a
+  small dependency.
 - **Reply/bounce ingestion** — inbound tracking (status replied/booked) + bounce webhook.
 - **Public auth** — replace the single-password session with Supabase Auth/JWT + signup.
 - **Brand** — footer/favicon via `brand.js` (deferred per CLAUDE.md; ask before adding).

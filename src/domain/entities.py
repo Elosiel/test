@@ -179,3 +179,14 @@ class Suppression:
     reason: str
     id: str = field(default_factory=new_id)
     created_at: datetime = field(default_factory=now)
+
+
+@dataclass(frozen=True)
+class Pack:
+    """A purchasable credit pack. Global catalog (not tenant-owned)."""
+    name: str
+    credits: int
+    price_cents: int
+    stripe_price_id: str | None = None
+    active: bool = True
+    id: str = field(default_factory=new_id)

@@ -64,6 +64,16 @@ class Config:
     physical_address: str = os.environ.get("OUTREACH_PHYSICAL_ADDRESS", "")
     unsubscribe_base_url: str = os.environ.get("OUTREACH_UNSUBSCRIBE_URL", "")
 
+    # Payments (step 6). Webhook secret used by the real Stripe adapter (the fake
+    # ignores it). Checkout success/cancel URLs returned to the payment provider.
+    stripe_webhook_secret: str = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+    checkout_success_url: str = os.environ.get(
+        "CHECKOUT_SUCCESS_URL", "http://localhost:8000/"
+    )
+    checkout_cancel_url: str = os.environ.get(
+        "CHECKOUT_CANCEL_URL", "http://localhost:8000/"
+    )
+
     def __post_init__(self) -> None:
         if self.backend == "postgres" and not self.database_url:
             raise ValueError("LEADCENTER_BACKEND=postgres requires DATABASE_URL")

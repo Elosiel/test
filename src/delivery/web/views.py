@@ -38,6 +38,7 @@ _STYLE = f"""
   .badge {{ font-size: .7rem; padding: .1rem .4rem; border: 1px solid #444; border-radius: 4px;
             color: #b59; }}
   .pitch {{ white-space: pre-wrap; font-size: .8rem; color: #cfcfcf; max-width: 40ch; }}
+  .packs {{ display: flex; gap: .6rem; flex-wrap: wrap; }}
   .msg {{ color: {_ACCENT}; margin-bottom: 1rem; }}
   .err {{ color: #ff6b6b; margin-bottom: 1rem; }}
   .note {{ color: #777; font-size: .8rem; margin-top: 2rem; }}
@@ -90,10 +91,25 @@ def _pitch_cell(lead: Lead, outreach_enabled: bool) -> str:
     return cell
 
 
+def _packs_section(packs) -> str:
+    if not packs:
+        return ""
+    cards = "".join(
+        f"<form method='post' action='/buy/{escape(p.id)}' style='margin:0'>"
+        f"<button type='submit'>{escape(p.name)} — {p.credits} credits "
+        f"(${p.price_cents // 100})</button></form>"
+        for p in packs
+    )
+    return (
+        "<h2>Buy credits <span class='sep'>///</span></h2>"
+        f"<div class='packs'>{cards}</div>"
+    )
+
+
 def render_dashboard(
     account_name: str, balance: int, leads: list[Lead],
     message: str | None = None, error: str | None = None,
-    outreach_enabled: bool = False,
+    outreach_enabled: bool = False, packs=None,
 ) -> str:
     msg = f"<p class='msg'>{escape(message)}</p>" if message else ""
     err = f"<p class='err'>{escape(error)}</p>" if error else ""
@@ -135,5 +151,6 @@ def render_dashboard(
         "</tbody></table>"
         "<p class='note'>Leads marked “fake data” come from the placeholder provider. "
         "Wire the Outscraper adapter (see docs/GOLIVE.md) for real businesses.</p>"
+        f"{_packs_section(packs or [])}"
     )
     return _page("Radar — Lead///Center", body)

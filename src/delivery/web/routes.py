@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from src.application import credits
 from src.application.outreach import contact_lead
+from src.application.payments import PackNotFoundError, start_checkout
 from src.application.pitch import draft_pitch
 from src.delivery.auth import (
     COOKIE_NAME,
@@ -51,11 +52,12 @@ def create_web_router(deps: Deps) -> APIRouter:
             acct = uow.accounts.get(account_id)
             balance = credits.balance(uow, account_id)
             leads = uow.leads.list_for_account(account_id)
+            packs = uow.packs.list_active()
         leads.sort(key=lambda l: l.rank, reverse=True)
         name = acct.name if acct else account_id
         return HTMLResponse(views.render_dashboard(
             name, balance, leads, message, error,
-            outreach_enabled=config.outreach_enabled,
+            outreach_enabled=config.outreach_enabled, packs=packs,
         ))
 
     @router.get("/login", response_class=HTMLResponse)
@@ -181,5 +183,22 @@ def create_web_router(deps: Deps) -> APIRouter:
         except LeadCenterError as e:
             return _render_dashboard(account_id, error=str(e))
         return RedirectResponse("/", status_code=303)
+
+    @router.post("/buy/{pack_id}")
+    def buy(pack_id: str, request: Request):
+        account_id = resolve_account(config, request)
+        if not account_id:
+            return RedirectResponse("/login", status_code=303)
+        try:
+            session = start_checkout(
+                deps.uow_factory_for(account_id), deps.payments,
+                account_id=account_id, pack_id=pack_id,
+                success_url=config.checkout_success_url,
+                cancel_url=config.checkout_cancel_url,
+            )
+        except PackNotFoundError:
+            return _render_dashboard(account_id, error="That pack is unavailable.")
+        # Hand off to the (fake) hosted checkout page.
+        return RedirectResponse(session.url, status_code=303)
 
     return router

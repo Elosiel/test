@@ -20,6 +20,7 @@ from src.domain.entities import (
     Lead,
     LeadStatus,
     Message,
+    Pack,
     Run,
     Suppression,
 )
@@ -184,6 +185,47 @@ class _CreditRepo:
         )
         return int(self._cur.fetchone()[0])
 
+    def event_exists(self, stripe_event_id: str) -> bool:
+        self._cur.execute(
+            "SELECT 1 FROM credit_ledger WHERE stripe_event_id = %s LIMIT 1",
+            (stripe_event_id,),
+        )
+        return self._cur.fetchone() is not None
+
+
+class _PackRepo:
+    def __init__(self, cur: psycopg.Cursor) -> None:
+        self._cur = cur
+
+    _SELECT = "SELECT id, name, credits, price_cents, stripe_price_id, active FROM packs"
+
+    @staticmethod
+    def _row(r) -> Pack:
+        return Pack(id=str(r[0]), name=r[1], credits=r[2], price_cents=r[3],
+                    stripe_price_id=r[4], active=r[5])
+
+    def add(self, pack: Pack) -> None:
+        self._cur.execute(
+            "INSERT INTO packs (id, name, credits, price_cents, stripe_price_id, active) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
+            (pack.id, pack.name, pack.credits, pack.price_cents, pack.stripe_price_id,
+             pack.active),
+        )
+
+    def get(self, pack_id: str) -> Pack | None:
+        self._cur.execute(f"{self._SELECT} WHERE id = %s", (pack_id,))
+        row = self._cur.fetchone()
+        return self._row(row) if row else None
+
+    def get_by_name(self, name: str) -> Pack | None:
+        self._cur.execute(f"{self._SELECT} WHERE name = %s", (name,))
+        row = self._cur.fetchone()
+        return self._row(row) if row else None
+
+    def list_active(self) -> list[Pack]:
+        self._cur.execute(f"{self._SELECT} WHERE active ORDER BY price_cents")
+        return [self._row(r) for r in self._cur.fetchall()]
+
 
 class _MessageRepo:
     def __init__(self, cur: psycopg.Cursor) -> None:
@@ -247,6 +289,7 @@ class PostgresUnitOfWork:
         self.credits = _CreditRepo(self._cur)
         self.messages = _MessageRepo(self._cur)
         self.suppression = _SuppressionRepo(self._cur)
+        self.packs = _PackRepo(self._cur)
         self._committed = False
         return self
 

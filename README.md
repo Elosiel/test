@@ -1,20 +1,25 @@
 # Lead///Center
 
-Multi-tenant lead-gen SaaS. This repo contains build-order **steps 1-2** (spine +
-scoring) plus a **deployable tenant-#1 MVP**: a server-rendered Radar feed dashboard
-with password login. See `ARCHITECTURE.md` for the full contract, `CLAUDE.md` for the
-working standards, and `docs/GOLIVE.md` for the deploy checklist.
+Multi-tenant lead-gen SaaS. The full v1 revenue path (build-order **steps 1-6**) is
+implemented behind ports, plus a **deployable tenant-#1 MVP**: a server-rendered Radar
+feed dashboard with password login. See `ARCHITECTURE.md` for the full contract,
+`CLAUDE.md` for the working standards, and `docs/GOLIVE.md` for the deploy checklist.
 
 ## What works today
 
 - **`RunScan`**: DISCOVER → write N leads → spend N credits, atomically, with
   confirm-before-spend and per-run caps.
-- **Scoring**: deterministic opportunity / fit / confidence → ranked leads.
-- **Radar feed dashboard** (`/`): log in, run a scan, see ranked leads + credit balance.
-- Tenant isolation enforced by Postgres RLS (`db/schema.sql`). Runs against an in-memory
+- **Scoring + signal**: deterministic opportunity / fit / confidence → ranked leads, with
+  the `fresh_pain` timing signal.
+- **Pitch**: on-demand, cost-safe AI draft per lead (signal-first / gap-first).
+- **Outreach** (behind `OUTREACH_ENABLED`): find → verify → suppression → send → track,
+  CAN-SPAM compliant, with a public unsubscribe.
+- **Payments**: credit packs + an idempotent webhook→ledger grant.
+- **Radar feed dashboard** (`/`): log in, scan, draft, contact, buy credits.
+- Tenant isolation enforced by Postgres RLS (`db/schema.sql`); runs against an in-memory
   store with no database for local dev.
-- ⚠️ Discovery uses a **fake** data provider (flagged "fake data" in the UI) until the
-  Outscraper adapter is wired — see `docs/GOLIVE.md`.
+- ⚠️ Data/AI/email/payments all run on **clearly-labelled fakes** until the real vendor
+  adapters are wired (keys required) — see `docs/GOLIVE.md`.
 
 ## Layout
 

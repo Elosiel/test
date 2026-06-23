@@ -10,7 +10,9 @@ from src.adapters.data.fake_data_provider import FakeDataProvider
 from src.adapters.db.memory import MemoryStore, MemoryUnitOfWork
 from src.adapters.email.fake_finder import FakeEmailFinder
 from src.adapters.email.fake_sender import FakeEmailSender
+from src.adapters.payments.fake_payments import FakePayments
 from src.application.accounts import ensure_tenant
+from src.application.payments import ensure_packs
 from src.config import Config, load_config
 from src.delivery.api.app import create_app
 from src.delivery.deps import Deps
@@ -49,6 +51,7 @@ def build_deps(config: Config) -> Deps:
         uow_factory_for=uow_factory_for,
         email_finder=FakeEmailFinder(),  # real Hunter/site-crawl swaps in later
         email_sender=FakeEmailSender(),  # real Resend/Postmark swaps in later
+        payments=FakePayments(),  # real Stripe adapter swaps in later
     )
 
 
@@ -61,11 +64,18 @@ def bootstrap_tenant(config: Config, deps: Deps) -> None:
         uow.commit()
 
 
+def bootstrap_packs(config: Config, deps: Deps) -> None:
+    """Seed the credit-pack catalog. Idempotent. Packs are global (no RLS)."""
+    with deps.uow_factory_for(config.tenant_owner_user_id)() as uow:
+        ensure_packs(uow)
+
+
 def build_app():
     config = load_config()
     deps = build_deps(config)
     if config.auth_mode == "session":
         bootstrap_tenant(config, deps)
+    bootstrap_packs(config, deps)
     return create_app(deps)
 
 

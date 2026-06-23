@@ -14,6 +14,7 @@ from src.domain.entities import (
     CreditLedgerEntry,
     Lead,
     Message,
+    Pack,
     Run,
     Suppression,
 )
@@ -41,6 +42,16 @@ class CreditRepo(Protocol):
     def balance(self, account_id: str) -> int:
         """Derived balance: SUM(delta) for the account. Never a stored counter."""
         ...
+    def event_exists(self, stripe_event_id: str) -> bool:
+        """True if a ledger row already carries this payment event id (idempotency)."""
+        ...
+
+
+class PackRepo(Protocol):
+    def add(self, pack: Pack) -> None: ...
+    def get(self, pack_id: str) -> Pack | None: ...
+    def list_active(self) -> list[Pack]: ...
+    def get_by_name(self, name: str) -> Pack | None: ...
 
 
 class MessageRepo(Protocol):
@@ -62,6 +73,7 @@ class UnitOfWork(Protocol):
     credits: CreditRepo
     messages: MessageRepo
     suppression: SuppressionRepo
+    packs: PackRepo
 
     def __enter__(self) -> "UnitOfWork": ...
     def __exit__(self, exc_type, exc, tb) -> bool | None: ...

@@ -116,6 +116,16 @@ CREATE TABLE IF NOT EXISTS suppression (
     created_at      timestamptz NOT NULL DEFAULT now()
 );
 
+-- Purchasable credit packs. Global catalog — NOT tenant-scoped, no RLS.
+CREATE TABLE IF NOT EXISTS packs (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    name            text NOT NULL,
+    credits         integer NOT NULL,
+    price_cents     integer NOT NULL,
+    stripe_price_id text,
+    active          boolean NOT NULL DEFAULT true
+);
+
 CREATE INDEX IF NOT EXISTS idx_leads_account ON leads(account_id);
 CREATE INDEX IF NOT EXISTS idx_ledger_account ON credit_ledger(account_id);
 CREATE INDEX IF NOT EXISTS idx_messages_account ON messages(account_id);
